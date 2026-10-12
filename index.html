@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SPM 华文研习 · 经典文言精读</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      background-color: #F8F6F0;
+      color: #2C2A29;
+      font-family: "PingFang SC", "Hiragino Sans GB", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", STSong, serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sans-font {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+    }
+    .vocab-annotated {
+      border-bottom: 2px dashed #C85A32;
+      color: #1A1A1A;
+      font-weight: 600;
+      cursor: pointer;
+      padding-bottom: 1px;
+      transition: all 0.2s ease;
+    }
+    .vocab-annotated:active, .vocab-annotated:hover {
+      background-color: rgba(200, 90, 50, 0.12);
+      border-bottom-style: solid;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-amber-100 selection:text-amber-900">
+  <header class="sticky top-0 z-20 bg-[#F8F6F0]/90 backdrop-blur-md border-b border-[#E8E4DA] px-4 py-3 sm:px-8 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <span class="text-xs px-2 py-0.5 rounded border border-[#8C2D19] text-[#8C2D19] font-medium sans-font">SPM 华文</span>
+      <h1 class="text-lg sm:text-xl font-bold tracking-tight text-[#1F1E1D]">天地华文 · 古文讲台</h1>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-6 mb-20">
+    <section id="article-list-view">
+      <div class="mb-6">
+        <h2 class="text-2xl font-bold text-stone-900 mb-1">选修与核心篇目</h2>
+        <p class="text-xs text-stone-500 sans-font">精选 SPM 经典文言篇目 · 点击字词即时解析释义</p>
+      </div>
+      <div id="articles-loading" class="text-center py-16 text-stone-400 text-sm sans-font">
+        正在从典籍库中调取课文…
+      </div>
+      <div id="articles-container" class="space-y-4 hidden"></div>
+    </section>
+
+    <section id="article-detail-view" class="hidden">
+      <button onclick="showListView()" class="mb-5 inline-flex items-center text-xs sans-font text-stone-500 hover:text-stone-800 transition-colors">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        返回篇目列表
+      </button>
+      <article class="bg-[#FCFAF7] border border-[#E8E4DA] rounded-2xl p-6 sm:p-8 shadow-sm">
+        <header class="border-b border-[#ECE7DC] pb-5 mb-6 text-center">
+          <div id="detail-dynasty" class="text-xs text-[#8C2D19] font-medium tracking-widest sans-font uppercase mb-1.5">先秦</div>
+          <h1 id="detail-title" class="text-2xl sm:text-3xl font-bold text-stone-900 tracking-wide mb-2">曹刿论战</h1>
+          <div id="detail-author" class="text-xs text-stone-500 sans-font">左丘明</div>
+        </header>
+        <div id="detail-content" class="space-y-6 text-base sm:text-lg leading-loose tracking-wide text-stone-800 text-justify"></div>
+      </article>
+    </section>
+  </main>
+
+  <div id="vocab-modal" class="fixed inset-x-0 bottom-0 z-50 transform translate-y-full transition-transform duration-300 ease-out max-w-2xl mx-auto px-4 pb-6">
+    <div class="bg-white border border-stone-200 rounded-2xl p-5 shadow-2xl relative">
+      <button onclick="closeVocabModal()" class="absolute top-4 right-4 text-stone-400 hover:text-stone-700">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+      <div class="flex items-baseline space-x-3 mb-2">
+        <span id="vocab-word" class="text-2xl font-bold text-[#8C2D19]">肉食者</span>
+        <span id="vocab-pinyin" class="text-sm text-stone-500 sans-font italic">ròu shí zhě</span>
+        <span id="vocab-pos" class="text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 sans-font">名词短语</span>
+      </div>
+      <div class="text-xs text-stone-400 sans-font mb-2">【SPM 释义解析】</div>
+      <p id="vocab-meaning" class="text-sm text-stone-800 leading-relaxed sans-font mb-1">吃肉的人。这里指居高位、享厚禄的高官显贵。</p>
+      <p id="vocab-note" class="text-xs text-stone-500 sans-font mt-2 border-t border-stone-100 pt-2"></p>
+    </div>
+  </div>
+
+  <div id="modal-backdrop" onclick="closeVocabModal()" class="fixed inset-0 bg-stone-900/30 z-40 hidden backdrop-blur-[1px] transition-opacity"></div>
+
+  <script>
+    const SUPABASE_URL = "https://nxiktwqbwyfjqvrqlbhc.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54aWt0d3Fid3lmanF2cnFsYmhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MTk2NjksImV4cCI6MjEwNzM5NTY2OX0.asAuYkr6xIdTUgMF4IiJYZNbcpMaTsYc2J7_mHqbUZ0";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let allArticles = [];
+    let currentVocabMap = {};
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      await loadArticles();
+    });
+
+    async function loadArticles() {
+      try {
+        const { data, error } = await supabaseClient
+          .from("articles")
+          .select("*")
+          .order("id", { ascending: true });
+        if (error) throw error;
+        allArticles = data || [];
+        renderArticleList(allArticles);
+      } catch (err) {
+        console.error("加载文章失败:", err);
+        document.getElementById("articles-loading").innerHTML = `<span class="text-red-500">数据拉取失败，请检查网络设置。</span>`;
+      }
+    }
+
+    function renderArticleList(articles) {
+      const container = document.getElementById("articles-container");
+      const loading = document.getElementById("articles-loading");
+      loading.classList.add("hidden");
+      container.classList.remove("hidden");
+      container.innerHTML = "";
+
+      if (articles.length === 0) {
+        container.innerHTML = `<div class="text-center py-12 text-stone-400 sans-font text-sm">暂无课文，请在 Supabase 中添加数据。</div>`;
+        return;
+      }
+
+      articles.forEach(art => {
+        const card = document.createElement("div");
+        card.className = "bg-[#FCFAF7] border border-[#E8E4DA] rounded-xl p-5 hover:border-[#C85A32] hover:shadow-md transition-all cursor-pointer flex items-center justify-between";
+        card.onclick = () => openArticle(art.id);
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center space-x-2 mb-1">
+              <span class="text-xs text-[#8C2D19] font-medium sans-font">${art.dynasty || '经典'}</span>
+              <span class="text-stone-300">·</span>
+              <span class="text-xs text-stone-500 sans-font">${art.author || '佚名'}</span>
+            </div>
+            <h3 class="text-lg font-bold text-stone-900">${art.title}</h3>
+          </div>
+          <div class="flex items-center text-xs text-[#8C2D19] font-medium sans-font">
+            阅读精读
+            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function openArticle(articleId) {
+      const article = allArticles.find(a => a.id === articleId);
+      if (!article) return;
+
+      document.getElementById("detail-title").innerText = article.title;
+      document.getElementById("detail-dynasty").innerText = article.dynasty || "经典文言";
+      document.getElementById("detail-author").innerText = article.author || "佚名";
+
+      const contentBox = document.getElementById("detail-content");
+      contentBox.innerHTML = "";
+
+      let contentData = article.content;
+      if (typeof contentData === "string") {
+        try {
+          contentData = JSON.parse(contentData);
+        } catch(e) {
+          contentData = [{ text: contentData, vocabs: [] }];
+        }
+      }
+
+      currentVocabMap = {};
+
+      if (Array.isArray(contentData)) {
+        contentData.forEach((section, sIdx) => {
+          let paragraphText = section.text || "";
+          const vocabs = section.vocabs || [];
+
+          vocabs.forEach((v, vIdx) => {
+            const key = `vocab_${sIdx}_${vIdx}`;
+            currentVocabMap[key] = v;
+            paragraphText = paragraphText.split(v.word).join(`<span class="vocab-annotated" onclick="showVocab('${key}')">${v.word}</span>`);
+          });
+
+          const p = document.createElement("p");
+          p.innerHTML = paragraphText;
+          contentBox.appendChild(p);
+        });
+      } else {
+        contentBox.innerText = article.content;
+      }
+
+      document.getElementById("article-list-view").classList.add("hidden");
+      document.getElementById("article-detail-view").classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function showListView() {
+      document.getElementById("article-detail-view").classList.add("hidden");
+      document.getElementById("article-list-view").classList.remove("hidden");
+    }
+
+    function showVocab(vocabKey) {
+      const vocab = currentVocabMap[vocabKey];
+      if (!vocab) return;
+
+      document.getElementById("vocab-word").innerText = vocab.word || "";
+      document.getElementById("vocab-pinyin").innerText = vocab.pinyin || "";
+      document.getElementById("vocab-pos").innerText = vocab.pos || "词解";
+      document.getElementById("vocab-meaning").innerText = vocab.meaning || "暂无释义";
+      
+      const noteEl = document.getElementById("vocab-note");
+      if (vocab.note) {
+        noteEl.innerText = `💡 考点提示：${vocab.note}`;
+        noteEl.classList.remove("hidden");
+      } else {
+        noteEl.classList.add("hidden");
+      }
+
+      document.getElementById("modal-backdrop").classList.remove("hidden");
+      document.getElementById("vocab-modal").classList.remove("translate-y-full");
+    }
+
+    function closeVocabModal() {
+      document.getElementById("vocab-modal").classList.add("translate-y-full");
+      document.getElementById("modal-backdrop").classList.add("hidden");
+    }
+  </script>
+</body>
+</html>
